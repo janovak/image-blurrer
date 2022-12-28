@@ -4,7 +4,7 @@ import pycuda.autoinit
 import pycuda.driver as cuda
 import sys
 
-def get_optimal_block_size_serial(image_width, image_height):
+def get_optimal_block_dimensions_serial(image_width, image_height):
     factors = {
         128 : [1, 2, 4, 8, 16, 32, 64, 128],
         160 : [1, 2, 4, 5, 8, 10, 16, 20, 32, 40, 80, 160],
@@ -29,14 +29,14 @@ def get_optimal_block_size_serial(image_width, image_height):
                 min_h = h
     return min_w, min_h
 
-def get_optimal_block_size_parallel(image_width, image_height):
+def get_optimal_block_dimensions_parallel(image_width, image_height):
     # Set up the arrays for the device
     result = numpy.empty(2, dtype=numpy.int32)
     result_gpu = cuda.mem_alloc(result.nbytes)
     cuda.memcpy_htod(result_gpu, result)
 
     # Get the function from the kernel
-    mod = cuda.module_from_file('optimal_block_size_kernel.cubin')
+    mod = cuda.module_from_file('optimal_block_dimensions_kernel.cubin')
     optimal_block_dimensions = mod.get_function('FindOptimalBlockDimensions')
 
     # Calculate the optimal block dimensions on the device
