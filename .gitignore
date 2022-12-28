@@ -55,6 +55,9 @@ coverage.xml
 *.mo
 *.pot
 
+# CUDA stuff:
+*.cubin
+
 # Django stuff:
 *.log
 local_settings.py
