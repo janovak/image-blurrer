@@ -20,7 +20,7 @@ def get_optimal_block_dimensions_serial(image_width, image_height):
     # Iterate over all pairs of factors that multiply to a multiple of 32 between 128 and 256
     for block_size in range(128, 257, 32):
         for w in factors[block_size]:
-            h = block_size / w
+            h = block_size // w
             # Calculate how many blocks of size w x h would be needed to cover the image and how much waste there would be
             waste = math.ceil(image_width / w) * w * math.ceil(image_height / h) * h - image_area
             if min_waste > waste:
@@ -43,4 +43,4 @@ def get_optimal_block_dimensions_parallel(image_width, image_height):
     optimal_block_dimensions(numpy.int32(image_width), numpy.int32(image_height), result_gpu, block=(64, 1, 1), grid=(1, 1, 1))
     cuda.memcpy_dtoh(result, result_gpu)
 
-    return result
+    return int(result[0]), int(result[1])
