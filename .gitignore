@@ -1,3 +1,9 @@
+# Test images
+images/
+
+# CUDA stuff:
+*.cubin
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -54,9 +60,6 @@ coverage.xml
 # Translations
 *.mo
 *.pot
-
-# CUDA stuff:
-*.cubin
 
 # Django stuff:
 *.log
