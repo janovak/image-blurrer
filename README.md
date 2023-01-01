@@ -1,4 +1,6 @@
-# image-blurrer
-Blurs an image using the box blur algorithm.
+# image-processing
 
-Takes an image file and the radius (amount to blur) as command line arguments and writes the blurred image to disk.
+Provides a PyCuda implementations of varius image processing algorithms
+
+## Image blurring
+Blurs an image using the box blur algorithm.
