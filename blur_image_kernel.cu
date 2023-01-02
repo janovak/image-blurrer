@@ -1,31 +1,32 @@
+#define RADIUS 25
+
+__device__ unsigned int GetPixelWithPadding(unsigned int x, unsigned int y, unsigned int width, unsigned int padding)
+{
+    return (x + padding + (y + padding) * (width + 2 * padding)) * gridDim.z + blockIdx.z;
+}
+
 __device__ unsigned int GetPixel(unsigned int x, unsigned int y, unsigned int width)
 {
-    return (x + y * width) * gridDim.z + blockIdx.z;
+    return GetPixelWithPadding(x, y, width, 0);
 }
 
 // radius can't be an unsigned int because "-radius" is used in the for...loops
-extern "C" __global__ void BoxBlur(int *in_array, int *out_array, int radius, unsigned int width, unsigned int height)
+extern "C" __global__ void BoxBlur(int *in_array, int *out_array, unsigned int width, unsigned int height)
 {
     unsigned int denominator = 0;
     const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
     const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
-    if (x >= width || y >= height)
-    {
-        return;
-    }
     const unsigned int index = GetPixel(x, y, width);
     out_array[index] = 0;
-    for (int dx = -radius; dx <= radius; ++dx)
+#pragma unroll
+    for (int dx = -RADIUS; dx <= RADIUS; ++dx)
     {
-        for (int dy = -radius; dy <= radius; ++dy)
+#pragma unroll
+        for (int dy = -RADIUS; dy <= RADIUS; ++dy)
         {
             const int neighborX = x + dx;
             const int neighborY = y + dy;
-            if (neighborX < 0 || neighborX >= width || neighborY < 0 || neighborY >= height)
-            {
-                continue;
-            }
-            const int neighborIndex = GetPixel(neighborX, neighborY, width);
+            const int neighborIndex = GetPixelWithPadding(neighborX, neighborY, width, RADIUS);
             out_array[index] += in_array[neighborIndex];
             ++denominator;
         }
