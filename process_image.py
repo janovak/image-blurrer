@@ -39,14 +39,11 @@ mod = cuda.module_from_file('blur_image_kernel.cubin')
 box_blur = mod.get_function('BoxBlur')
 box_blur(flattened_img_gpu,
             result_gpu,
-            numpy.int32(BLUR_LEVEL),
             numpy.int32(image_width),
             numpy.int32(image_height),
             block=(block_width, block_height, 1),
             grid=(grid_width, grid_height, PIXEL_ATTRIBUTES))
 cuda.memcpy_dtoh(result, result_gpu)
-
-cuda.Context.synchronize()
 
 # Write the blurred image to disk
 imageio.imwrite(filepath[0] + '_blurred' + str(BLUR_LEVEL) + filepath[1], numpy.reshape(result.astype(numpy.uint8), (image_height, image_width, PIXEL_ATTRIBUTES)))

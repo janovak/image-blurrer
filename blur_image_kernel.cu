@@ -10,7 +10,6 @@ __device__ unsigned int GetPixel(unsigned int x, unsigned int y, unsigned int wi
     return GetPixelWithPadding(x, y, width, 0);
 }
 
-// radius can't be an unsigned int because "-radius" is used in the for...loops
 extern "C" __global__ void BoxBlur(int *in_array, int *out_array, unsigned int width, unsigned int height)
 {
     unsigned int denominator = 0;
