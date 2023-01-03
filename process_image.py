@@ -25,10 +25,10 @@ grid_height = math.ceil(image_height / block_height)
 
 # Pad and flatten the image into a 1D array
 padded_img = numpy.pad(original_img, [(BLUR_LEVEL, BLUR_LEVEL), (BLUR_LEVEL, BLUR_LEVEL), (0, 0)], mode='edge')
-flattened_img = padded_img.flatten().astype(numpy.int32)
+flattened_img = padded_img.flatten().astype(numpy.uint8)
 flattened_img_gpu = cuda.mem_alloc(flattened_img.nbytes)
 # Create an empty result array
-result = numpy.empty(original_img.size, dtype=numpy.int32)
+result = numpy.empty(original_img.size, dtype=numpy.uint8)
 result_gpu = cuda.mem_alloc(result.nbytes)
 # Copy input and output arrays to the device
 cuda.memcpy_htod(flattened_img_gpu, flattened_img)
