@@ -38,3 +38,26 @@ extern "C" __global__ void BoxBlur(uint8_t *in_array, uint8_t *out_array, unsign
     }
     out_array[index] = sum / denominator;
 }
+
+extern "C" __global__ void BoxBlur2(uint8_t *in_array, uint8_t *out_array, float *gaussianKernel, unsigned int width, unsigned int height)
+{
+    float sum = 0;
+    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+    if (x >= width || y >= height)
+    {
+        return;
+    }
+    const unsigned int index = GetPixel(x, y, width);
+    for (int dy = -RADIUS; dy <= RADIUS; ++dy)
+    {
+        const int neighborY = y + dy;
+        for (int dx = -RADIUS; dx <= RADIUS; ++dx)
+        {
+            const int neighborX = x + dx;
+            const int neighborIndex = GetPixelWithPadding(neighborX, neighborY, width, RADIUS);
+            sum += in_array[neighborIndex] * gaussianKernel[(dy + RADIUS) * (RADIUS * 2 + 1) + dx + RADIUS];
+        }
+    }
+    out_array[index] = static_cast<uint8_t>(sum);
+}
