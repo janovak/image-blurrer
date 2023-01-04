@@ -1,6 +1,6 @@
 #include <stdint.h>
 
-#define RADIUS 25
+#define BLUR_RADIUS 25
 
 __device__ unsigned int GetPixelWithPadding(unsigned int x, unsigned int y, unsigned int width, unsigned int padding)
 {
@@ -24,14 +24,14 @@ extern "C" __global__ void BoxBlur(uint8_t *in_array, uint8_t *out_array, unsign
     }
     const unsigned int index = GetPixel(x, y, width);
 #pragma unroll
-    for (int dy = -RADIUS; dy <= RADIUS; ++dy)
+    for (int dy = -BLUR_RADIUS; dy <= BLUR_RADIUS; ++dy)
     {
         const int neighborY = y + dy;
 #pragma unroll
-        for (int dx = -RADIUS; dx <= RADIUS; ++dx)
+        for (int dx = -BLUR_RADIUS; dx <= BLUR_RADIUS; ++dx)
         {
             const int neighborX = x + dx;
-            const int neighborIndex = GetPixelWithPadding(neighborX, neighborY, width, RADIUS);
+            const int neighborIndex = GetPixelWithPadding(neighborX, neighborY, width, BLUR_RADIUS);
             sum += in_array[neighborIndex];
             ++denominator;
         }
@@ -50,15 +50,15 @@ extern "C" __global__ void GaussianBlur(uint8_t *in_array, uint8_t *out_array, f
     float sum = 0;
     const unsigned int index = GetPixel(x, y, width);
 #pragma unroll
-    for (int dy = -RADIUS; dy <= RADIUS; ++dy)
+    for (int dy = -BLUR_RADIUS; dy <= BLUR_RADIUS; ++dy)
     {
         const int neighborY = y + dy;
 #pragma unroll
-        for (int dx = -RADIUS; dx <= RADIUS; ++dx)
+        for (int dx = -BLUR_RADIUS; dx <= BLUR_RADIUS; ++dx)
         {
             const int neighborX = x + dx;
-            const int neighborIndex = GetPixelWithPadding(neighborX, neighborY, width, RADIUS);
-            sum += in_array[neighborIndex] * gaussianKernel[(dy + RADIUS) * (RADIUS * 2 + 1) + dx + RADIUS];
+            const int neighborIndex = GetPixelWithPadding(neighborX, neighborY, width, BLUR_RADIUS);
+            sum += in_array[neighborIndex] * gaussianKernel[(dy + BLUR_RADIUS) * (BLUR_RADIUS * 2 + 1) + dx + BLUR_RADIUS];
         }
     }
     out_array[index] = static_cast<uint8_t>(sum);
