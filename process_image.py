@@ -35,8 +35,8 @@ cuda.memcpy_htod(flattened_img_gpu, flattened_img)
 cuda.memcpy_htod(result_gpu, result)
 # Call the method on the device to blur the image
 mod = cuda.module_from_file('blur_image_kernel.cubin')
-box_blur = mod.get_function('BoxBlur2')
 """
+box_blur = mod.get_function('BoxBlur')
 box_blur(flattened_img_gpu,
             result_gpu,
             numpy.int32(image_width),
@@ -57,7 +57,8 @@ gaussian_kernel.flatten().astype(numpy.float32)
 gaussian_kernel_gpu = cuda.mem_alloc(gaussian_kernel.nbytes)
 # Copy input and output arrays to the device
 cuda.memcpy_htod(gaussian_kernel_gpu, gaussian_kernel)
-box_blur(flattened_img_gpu,
+gaussian_blur = mod.get_function('GaussianBlur')
+gaussian_blur(flattened_img_gpu,
             result_gpu,
             gaussian_kernel_gpu,
             numpy.int32(image_width),

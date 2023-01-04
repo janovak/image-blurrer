@@ -24,13 +24,13 @@ extern "C" __global__ void BoxBlur(uint8_t *in_array, uint8_t *out_array, unsign
     }
     const unsigned int index = GetPixel(x, y, width);
 #pragma unroll
-    for (int dx = -RADIUS; dx <= RADIUS; ++dx)
+    for (int dy = -RADIUS; dy <= RADIUS; ++dy)
     {
+        const int neighborY = y + dy;
 #pragma unroll
-        for (int dy = -RADIUS; dy <= RADIUS; ++dy)
+        for (int dx = -RADIUS; dx <= RADIUS; ++dx)
         {
             const int neighborX = x + dx;
-            const int neighborY = y + dy;
             const int neighborIndex = GetPixelWithPadding(neighborX, neighborY, width, RADIUS);
             sum += in_array[neighborIndex];
             ++denominator;
@@ -39,19 +39,21 @@ extern "C" __global__ void BoxBlur(uint8_t *in_array, uint8_t *out_array, unsign
     out_array[index] = sum / denominator;
 }
 
-extern "C" __global__ void BoxBlur2(uint8_t *in_array, uint8_t *out_array, float *gaussianKernel, unsigned int width, unsigned int height)
+extern "C" __global__ void GaussianBlur(uint8_t *in_array, uint8_t *out_array, float *gaussianKernel, unsigned int width, unsigned int height)
 {
-    float sum = 0;
     const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
     const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
     if (x >= width || y >= height)
     {
         return;
     }
+    float sum = 0;
     const unsigned int index = GetPixel(x, y, width);
+#pragma unroll
     for (int dy = -RADIUS; dy <= RADIUS; ++dy)
     {
         const int neighborY = y + dy;
+#pragma unroll
         for (int dx = -RADIUS; dx <= RADIUS; ++dx)
         {
             const int neighborX = x + dx;
