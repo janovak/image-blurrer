@@ -83,6 +83,28 @@ def gaussian_blur(dimensions, original_img):
     cuda.memcpy_dtoh(blurred_image, blurred_image_gpu)
     return blurred_image
 
+def grayscale_filter(dimensions, original_img):
+    # Flatten the image into a 1D array
+    flattened_img = original_img.flatten().astype(numpy.uint8)
+    flattened_img_gpu = cuda.mem_alloc(flattened_img.nbytes)
+    # Create an empty result array
+    result = numpy.empty(original_img.size, dtype=numpy.uint8)
+    result_gpu = cuda.mem_alloc(result.nbytes)
+    # Copy input and output arrays to the device
+    cuda.memcpy_htod(flattened_img_gpu, flattened_img)
+    cuda.memcpy_htod(result_gpu, result)
+    # Call the method on the device to blur the image
+    mod = cuda.module_from_file('grayscale_kernel.cubin')
+    box_blur = mod.get_function('GrayscaleFilter')
+    box_blur(flattened_img_gpu,
+                result_gpu,
+                numpy.int32(dimensions.image_width),
+                numpy.int32(dimensions.image_height),
+                block=(dimensions.block_width, dimensions.block_height, 1),
+                grid=(dimensions.grid_width, dimensions.grid_height, PIXEL_ATTRIBUTES))
+    cuda.memcpy_dtoh(result, result_gpu)
+    return result
+
 path = sys.argv[1]
 # Open the image
 original_img = imageio.imread(path, pilmode='RGB')
@@ -97,9 +119,13 @@ grid_height = math.ceil(image_height / block_height)
 dimensions = Dimensions(image_width, image_height, block_width, block_height, grid_width, grid_height)
 
 # Calculate and write the blurred image to disk
-blurred_image = box_blur(dimensions, original_img)
-imageio.imwrite(filepath[0] + '_boxblurred' + str(BLUR_RADIUS) + filepath[1], numpy.reshape(blurred_image.astype(numpy.uint8), (image_height, image_width, PIXEL_ATTRIBUTES)))
+box_blurred_image = box_blur(dimensions, original_img)
+imageio.imwrite(filepath[0] + '_boxblurred' + str(BLUR_RADIUS) + filepath[1], numpy.reshape(box_blurred_image.astype(numpy.uint8), (image_height, image_width, PIXEL_ATTRIBUTES)))
 
 # Calculate and write the blurred image to disk
-blurred_image = gaussian_blur(dimensions, original_img)
-imageio.imwrite(filepath[0] + '_gaussianblurred' + str(BLUR_RADIUS) + filepath[1], numpy.reshape(blurred_image.astype(numpy.uint8), (image_height, image_width, PIXEL_ATTRIBUTES)))
+gaussian_blurred_image = gaussian_blur(dimensions, original_img)
+imageio.imwrite(filepath[0] + '_gaussianblurred' + str(BLUR_RADIUS) + filepath[1], numpy.reshape(gaussian_blurred_image.astype(numpy.uint8), (image_height, image_width, PIXEL_ATTRIBUTES)))
+
+# Calculate and write the blurred image to disk
+grayscaled_image = grayscale_filter(dimensions, original_img)
+imageio.imwrite(filepath[0] + '_grayscaled' + filepath[1], numpy.reshape(grayscaled_image.astype(numpy.uint8), (image_height, image_width, PIXEL_ATTRIBUTES)))

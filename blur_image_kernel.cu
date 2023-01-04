@@ -1,16 +1,7 @@
 #include <stdint.h>
+#include "index_helpers.cuh"
 
 #define BLUR_RADIUS 25
-
-__device__ unsigned int GetPixelWithPadding(unsigned int x, unsigned int y, unsigned int width, unsigned int padding)
-{
-    return (x + padding + (y + padding) * (width + 2 * padding)) * gridDim.z + blockIdx.z;
-}
-
-__device__ unsigned int GetPixel(unsigned int x, unsigned int y, unsigned int width)
-{
-    return GetPixelWithPadding(x, y, width, 0);
-}
 
 extern "C" __global__ void BoxBlur(uint8_t *in_array, uint8_t *out_array, unsigned int width, unsigned int height)
 {
@@ -22,7 +13,7 @@ extern "C" __global__ void BoxBlur(uint8_t *in_array, uint8_t *out_array, unsign
     {
         return;
     }
-    const unsigned int index = GetPixel(x, y, width);
+    const unsigned int index = GetPixel(x, y, width) + blockIdx.z;
 #pragma unroll
     for (int dy = -BLUR_RADIUS; dy <= BLUR_RADIUS; ++dy)
     {
@@ -31,7 +22,7 @@ extern "C" __global__ void BoxBlur(uint8_t *in_array, uint8_t *out_array, unsign
         for (int dx = -BLUR_RADIUS; dx <= BLUR_RADIUS; ++dx)
         {
             const int neighborX = x + dx;
-            const int neighborIndex = GetPixelWithPadding(neighborX, neighborY, width, BLUR_RADIUS);
+            const int neighborIndex = GetPixelWithPadding(neighborX, neighborY, width, BLUR_RADIUS) + blockIdx.z;
             sum += in_array[neighborIndex];
             ++denominator;
         }
@@ -48,7 +39,7 @@ extern "C" __global__ void GaussianBlur(uint8_t *in_array, uint8_t *out_array, f
         return;
     }
     float sum = 0;
-    const unsigned int index = GetPixel(x, y, width);
+    const unsigned int index = GetPixel(x, y, width) + blockIdx.z;
 #pragma unroll
     for (int dy = -BLUR_RADIUS; dy <= BLUR_RADIUS; ++dy)
     {
@@ -57,7 +48,7 @@ extern "C" __global__ void GaussianBlur(uint8_t *in_array, uint8_t *out_array, f
         for (int dx = -BLUR_RADIUS; dx <= BLUR_RADIUS; ++dx)
         {
             const int neighborX = x + dx;
-            const int neighborIndex = GetPixelWithPadding(neighborX, neighborY, width, BLUR_RADIUS);
+            const int neighborIndex = GetPixelWithPadding(neighborX, neighborY, width, BLUR_RADIUS) + blockIdx.z;
             sum += in_array[neighborIndex] * gaussianKernel[(dy + BLUR_RADIUS) * (BLUR_RADIUS * 2 + 1) + dx + BLUR_RADIUS];
         }
     }
