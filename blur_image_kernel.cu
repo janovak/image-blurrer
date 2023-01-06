@@ -1,7 +1,7 @@
 #include <stdint.h>
 #include "index_helpers.cuh"
 
-#define BLUR_RADIUS 25
+#define BLUR_RADIUS 1
 
 extern "C" __global__ void BoxBlur(uint8_t *in_array, uint8_t *out_array, unsigned int width, unsigned int height)
 {
