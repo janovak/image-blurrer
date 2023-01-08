@@ -78,19 +78,20 @@ def grayscale_filter(dimensions, original_img):
     result_gpu = gpuarray.to_gpu(numpy.empty(original_img.size, dtype=numpy.uint8))
     # Call the method on the device to blur the image
     mod = cuda.module_from_file('grayscale_kernel.cubin')
-    box_blur = mod.get_function('GrayscaleFilter')
-    box_blur(flattened_img_gpu,
-                result_gpu,
-                numpy.int32(dimensions.image_width),
-                numpy.int32(dimensions.image_height),
-                block=(dimensions.block_width, dimensions.block_height, 1),
-                grid=(dimensions.grid_width, dimensions.grid_height, PIXEL_ATTRIBUTES))
+    grayscale_filter = mod.get_function('GrayscaleFilter')
+    grayscale_filter(flattened_img_gpu,
+                        result_gpu,
+                        numpy.int32(dimensions.image_width),
+                        numpy.int32(dimensions.image_height),
+                        block=(dimensions.block_width, dimensions.block_height, 1),
+                        grid=(dimensions.grid_width, dimensions.grid_height, PIXEL_ATTRIBUTES))
     return result_gpu.get()
 
 def sobel_filter(dimensions, original_img):
     grayscaled_img = grayscale_filter(dimensions, original_img)
     blurred_and_grayed_img = gaussian_blur(dimensions, numpy.reshape(grayscaled_img.astype(numpy.uint8), (image_height, image_width, PIXEL_ATTRIBUTES)))
-    preprocessed_img = numpy.pad(numpy.reshape(blurred_and_grayed_img.astype(numpy.uint8), (image_height, image_width, PIXEL_ATTRIBUTES)), [(SOBEL_FILTER_RADIUS, SOBEL_FILTER_RADIUS), (SOBEL_FILTER_RADIUS, SOBEL_FILTER_RADIUS), (0, 0)], mode='edge')
+    preprocessed_img = numpy.reshape(blurred_and_grayed_img.astype(numpy.uint8), (image_height, image_width, PIXEL_ATTRIBUTES))
+    preprocessed_img = numpy.pad(preprocessed_img, [(SOBEL_FILTER_RADIUS, SOBEL_FILTER_RADIUS), (SOBEL_FILTER_RADIUS, SOBEL_FILTER_RADIUS), (0, 0)], mode='edge')
     preprocessed_img_gpu =  gpuarray.to_gpu(preprocessed_img.flatten())
     # Create an empty filtered result array
     filtered_img_gpu = gpuarray.to_gpu(numpy.empty(original_img.size, dtype=numpy.int16))
@@ -103,9 +104,12 @@ def sobel_filter(dimensions, original_img):
                     numpy.int32(dimensions.image_height),
                     block=(dimensions.block_width, dimensions.block_height, 1),
                     grid=(dimensions.grid_width, dimensions.grid_height, PIXEL_ATTRIBUTES))
+
+    # TODO: make this performant
     # Get min and max values in the filtered array
-    max = gpuarray.max(filtered_img_gpu)
-    min = gpuarray.min(filtered_img_gpu)
+    min = filtered_img_gpu.get().min()
+    max = filtered_img_gpu.get().max()
+    
     # Create an empty result array
     result_gpu = gpuarray.to_gpu(numpy.empty(original_img.size, dtype=numpy.uint8))
     # Call the method on the device to the values in the matrix
@@ -114,11 +118,30 @@ def sobel_filter(dimensions, original_img):
                         result_gpu,
                         numpy.int32(dimensions.image_width),
                         numpy.int32(dimensions.image_height),
-                        min,
-                        max,
+                        numpy.float32(min),
+                        numpy.float32(max),
                         block=(dimensions.block_width, dimensions.block_height, 1),
                         grid=(dimensions.grid_width, dimensions.grid_height, PIXEL_ATTRIBUTES))
     return result_gpu.get()
+    
+def highlight_edges(dimensions, original_img):
+    sobel_filtered_img = sobel_filter(dimensions, original_img)
+    sobel_filtered_img_gpu = gpuarray.to_gpu(sobel_filtered_img.flatten())
+    # Flatten the original image to send to the device
+    flattened_img_gpu = gpuarray.to_gpu(original_img.flatten())
+    # Create an empty filtered result array
+    highlighted_img_gpu = gpuarray.to_gpu(numpy.empty(original_img.size, dtype=numpy.uint8))
+    # Call the method on the device to get the min and max values in the matrix
+    mod = cuda.module_from_file('sobel_kernel.cubin')
+    highlight_edges = mod.get_function('HighlightEdges')
+    highlight_edges(flattened_img_gpu,
+                    sobel_filtered_img_gpu,
+                    highlighted_img_gpu,
+                    numpy.int32(dimensions.image_width),
+                    numpy.int32(dimensions.image_height),
+                    block=(dimensions.block_width, dimensions.block_height, 1),
+                    grid=(dimensions.grid_width, dimensions.grid_height, PIXEL_ATTRIBUTES))
+    return highlighted_img_gpu.get()
 
 path = sys.argv[1]
 # Open the image
@@ -148,3 +171,7 @@ imageio.imwrite(filepath[0] + '_grayscaled' + filepath[1], numpy.reshape(graysca
 # Calculate and write the Sobel filter to disk
 sobel_filtered_image = sobel_filter(dimensions, original_img)
 imageio.imwrite(filepath[0] + '_sobelfiltered' + filepath[1], numpy.reshape(sobel_filtered_image.astype(numpy.uint8), (image_height, image_width, PIXEL_ATTRIBUTES)))
+
+# Calculate the edges and highlight them on the picture
+highlighted_edges_image = highlight_edges(dimensions, original_img)
+imageio.imwrite(filepath[0] + '_edgeshighlighted' + filepath[1], numpy.reshape(highlighted_edges_image.astype(numpy.uint8), (image_height, image_width, PIXEL_ATTRIBUTES)))

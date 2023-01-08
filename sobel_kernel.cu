@@ -4,7 +4,6 @@
 #include "index_helpers.cuh"
 
 #define FILTER_RADIUS 1
-#define FILTER_WIDTH (FILTER_RADIUS * 2 + 1)
 
 __device__ static const int HorizontalFilter[3][3] = {{1, 0, -1}, {2, 0, -2}, {1, 0, -1}};
 __device__ static const int VerticalFilter[3][3] = {{1, 2, 1}, {0, 0, 0}, {-1, -2, -1}};
@@ -46,4 +45,30 @@ extern "C" __global__ void NormalizeColors(int16_t *in_array, uint8_t *out_array
     }
     const unsigned int index = GetPixel(x, y, width) + blockIdx.z;
     out_array[index] = (in_array[index] - min) / (max - min) * 255;
+}
+
+extern "C" __global__ void HighlightEdges(uint8_t *in_imageArray, uint8_t *in_edgeArray, uint8_t *out_array, unsigned int width, unsigned int height)
+{
+    const unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+    if (x >= width || y >= height)
+    {
+        return;
+    }
+    const unsigned int index = GetPixel(x, y, width) + blockIdx.z;
+    if (in_edgeArray[index] > 50)
+    {
+        if (in_imageArray[index] > 128)
+        {
+            out_array[index] = 0;
+        }
+        else
+        {
+            out_array[index] = 255;
+        }
+    }
+    else
+    {
+        out_array[index] = in_imageArray[index];
+    }
 }
