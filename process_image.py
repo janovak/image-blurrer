@@ -6,6 +6,7 @@ import optimal_block_dimensions as block_dims
 import os
 import pycuda.autoinit
 import pycuda.driver as cuda
+import pycuda.gpuarray as gpuarray
 from typing import Final
 
 PIXEL_ATTRIBUTES: Final[int] = 3
@@ -36,14 +37,9 @@ def get_gaussian_kernel():
 def box_blur(dimensions, original_img):
     # Pad and flatten the image into a 1D array
     padded_img = numpy.pad(original_img, [(BLUR_RADIUS, BLUR_RADIUS), (BLUR_RADIUS, BLUR_RADIUS), (0, 0)], mode='edge')
-    flattened_img = padded_img.flatten().astype(numpy.uint8)
-    flattened_img_gpu = cuda.mem_alloc(flattened_img.nbytes)
+    flattened_img_gpu = gpuarray.to_gpu(padded_img.flatten().astype(numpy.uint8))
     # Create an empty result array
-    blurred_img = numpy.empty(original_img.size, dtype=numpy.uint8)
-    blurred_img_gpu = cuda.mem_alloc(blurred_img.nbytes)
-    # Copy input and output arrays to the device
-    cuda.memcpy_htod(flattened_img_gpu, flattened_img)
-    cuda.memcpy_htod(blurred_img_gpu, blurred_img)
+    blurred_img_gpu = gpuarray.to_gpu(numpy.empty(original_img.size, dtype=numpy.uint8))
     # Call the method on the device to blur the image
     mod = cuda.module_from_file('blur_image_kernel.cubin')
     box_blur = mod.get_function('BoxBlur')
@@ -53,24 +49,16 @@ def box_blur(dimensions, original_img):
                 numpy.int32(dimensions.image_height),
                 block=(dimensions.block_width, dimensions.block_height, 1),
                 grid=(dimensions.grid_width, dimensions.grid_height, PIXEL_ATTRIBUTES))
-    cuda.memcpy_dtoh(blurred_img, blurred_img_gpu)
-    return blurred_img
+    return blurred_img_gpu.get()
 
 def gaussian_blur(dimensions, original_img):
     # Pad and flatten the image into a 1D array
     padded_img = numpy.pad(original_img, [(BLUR_RADIUS, BLUR_RADIUS), (BLUR_RADIUS, BLUR_RADIUS), (0, 0)], mode='edge')
-    flattened_img = padded_img.flatten().astype(numpy.uint8)
-    flattened_img_gpu = cuda.mem_alloc(flattened_img.nbytes)
+    flattened_img_gpu = gpuarray.to_gpu(padded_img.flatten().astype(numpy.uint8))
     # Create an empty result array
-    blurred_img = numpy.empty(original_img.size, dtype=numpy.uint8)
-    blurred_img_gpu = cuda.mem_alloc(blurred_img.nbytes)
-    # Copy input and output arrays to the device
-    cuda.memcpy_htod(flattened_img_gpu, flattened_img)
-    cuda.memcpy_htod(blurred_img_gpu, blurred_img)
+    blurred_img_gpu = gpuarray.to_gpu(numpy.empty(original_img.size, dtype=numpy.uint8))
     # Generate the gaussian kernel
-    gaussian_kernel = get_gaussian_kernel()
-    gaussian_kernel_gpu = cuda.mem_alloc(gaussian_kernel.nbytes)
-    cuda.memcpy_htod(gaussian_kernel_gpu, gaussian_kernel)
+    gaussian_kernel_gpu = gpuarray.to_gpu(get_gaussian_kernel())
     # Call the method on the device to blur the image
     mod = cuda.module_from_file('blur_image_kernel.cubin')
     gaussian_blur = mod.get_function('GaussianBlur')
@@ -81,19 +69,13 @@ def gaussian_blur(dimensions, original_img):
                     numpy.int32(dimensions.image_height),
                     block=(dimensions.block_width, dimensions.block_height, 1),
                     grid=(dimensions.grid_width, dimensions.grid_height, PIXEL_ATTRIBUTES))
-    cuda.memcpy_dtoh(blurred_img, blurred_img_gpu)
-    return blurred_img
+    return blurred_img_gpu.get()
 
 def grayscale_filter(dimensions, original_img):
     # Flatten the image into a 1D array
-    flattened_img = original_img.flatten().astype(numpy.uint8)
-    flattened_img_gpu = cuda.mem_alloc(flattened_img.nbytes)
+    flattened_img_gpu = gpuarray.to_gpu(original_img.flatten().astype(numpy.uint8))
     # Create an empty result array
-    result = numpy.empty(original_img.size, dtype=numpy.uint8)
-    result_gpu = cuda.mem_alloc(result.nbytes)
-    # Copy input and output arrays to the device
-    cuda.memcpy_htod(flattened_img_gpu, flattened_img)
-    cuda.memcpy_htod(result_gpu, result)
+    result_gpu = gpuarray.to_gpu(numpy.empty(original_img.size, dtype=numpy.uint8))
     # Call the method on the device to blur the image
     mod = cuda.module_from_file('grayscale_kernel.cubin')
     box_blur = mod.get_function('GrayscaleFilter')
@@ -103,22 +85,15 @@ def grayscale_filter(dimensions, original_img):
                 numpy.int32(dimensions.image_height),
                 block=(dimensions.block_width, dimensions.block_height, 1),
                 grid=(dimensions.grid_width, dimensions.grid_height, PIXEL_ATTRIBUTES))
-    cuda.memcpy_dtoh(result, result_gpu)
-    return result
+    return result_gpu.get()
 
 def sobel_filter(dimensions, original_img):
     grayscaled_img = grayscale_filter(dimensions, original_img)
     blurred_and_grayed_img = gaussian_blur(dimensions, numpy.reshape(grayscaled_img.astype(numpy.uint8), (image_height, image_width, PIXEL_ATTRIBUTES)))
     preprocessed_img = numpy.pad(numpy.reshape(blurred_and_grayed_img.astype(numpy.uint8), (image_height, image_width, PIXEL_ATTRIBUTES)), [(SOBEL_FILTER_RADIUS, SOBEL_FILTER_RADIUS), (SOBEL_FILTER_RADIUS, SOBEL_FILTER_RADIUS), (0, 0)], mode='edge')
-    preprocessed_img = preprocessed_img.flatten()
-    preprocessed_img_gpu = cuda.mem_alloc(preprocessed_img.nbytes)
-    cuda.memcpy_htod(preprocessed_img_gpu, preprocessed_img)
-
-    # Create an empty result array
-    filtered_img = numpy.empty(original_img.size, dtype=numpy.int16)
-    filtered_img_gpu = cuda.mem_alloc(filtered_img.nbytes)
-    cuda.memcpy_htod(filtered_img_gpu, filtered_img)
-
+    preprocessed_img_gpu =  gpuarray.to_gpu(preprocessed_img.flatten())
+    # Create an empty filtered result array
+    filtered_img_gpu = gpuarray.to_gpu(numpy.empty(original_img.size, dtype=numpy.int16))
     # Call the method on the device to get the min and max values in the matrix
     mod = cuda.module_from_file('sobel_kernel.cubin')
     sobel_filter = mod.get_function('SobelFilter')
@@ -128,16 +103,12 @@ def sobel_filter(dimensions, original_img):
                     numpy.int32(dimensions.image_height),
                     block=(dimensions.block_width, dimensions.block_height, 1),
                     grid=(dimensions.grid_width, dimensions.grid_height, PIXEL_ATTRIBUTES))
-    cuda.memcpy_dtoh(filtered_img, filtered_img_gpu)
-
-    max = numpy.float32(numpy.max(filtered_img))
-    min = numpy.float32(numpy.min(filtered_img))
-    
+    # Get min and max values in the filtered array
+    max = gpuarray.max(filtered_img_gpu)
+    min = gpuarray.min(filtered_img_gpu)
     # Create an empty result array
-    result = numpy.empty(original_img.size, dtype=numpy.uint8)
-    result_gpu = cuda.mem_alloc(result.nbytes)
-    cuda.memcpy_htod(result_gpu, result)
-
+    result_gpu = gpuarray.to_gpu(numpy.empty(original_img.size, dtype=numpy.uint8))
+    # Call the method on the device to the values in the matrix
     normalize_colors = mod.get_function('NormalizeColors')
     normalize_colors(filtered_img_gpu,
                         result_gpu,
@@ -147,9 +118,7 @@ def sobel_filter(dimensions, original_img):
                         max,
                         block=(dimensions.block_width, dimensions.block_height, 1),
                         grid=(dimensions.grid_width, dimensions.grid_height, PIXEL_ATTRIBUTES))
-    cuda.memcpy_dtoh(result, result_gpu)
-
-    return result
+    return result_gpu.get()
 
 path = sys.argv[1]
 # Open the image
@@ -176,6 +145,6 @@ imageio.imwrite(filepath[0] + '_gaussianblurred' + str(BLUR_RADIUS) + filepath[1
 grayscaled_image = grayscale_filter(dimensions, original_img)
 imageio.imwrite(filepath[0] + '_grayscaled' + filepath[1], numpy.reshape(grayscaled_image.astype(numpy.uint8), (image_height, image_width, PIXEL_ATTRIBUTES)))
 
-# Calculate and write the blurred image to disk
+# Calculate and write the Sobel filter to disk
 sobel_filtered_image = sobel_filter(dimensions, original_img)
 imageio.imwrite(filepath[0] + '_sobelfiltered' + filepath[1], numpy.reshape(sobel_filtered_image.astype(numpy.uint8), (image_height, image_width, PIXEL_ATTRIBUTES)))
