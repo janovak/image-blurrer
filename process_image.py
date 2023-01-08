@@ -10,6 +10,7 @@ from typing import Final
 
 PIXEL_ATTRIBUTES: Final[int] = 3
 BLUR_RADIUS: Final[int] = 1
+SOBEL_FILTER_RADIUS: Final[int] = 1
 
 class Dimensions:
     def __init__(self, image_width, image_height, block_width, block_height, grid_width, grid_height):
@@ -105,81 +106,47 @@ def grayscale_filter(dimensions, original_img):
     cuda.memcpy_dtoh(result, result_gpu)
     return result
 
-def sobel_filter_one_dimension(dimensions, original_img, filter_array_gpu):   
-    # Pad and flatten the image into a 1D array
-    padded_img = numpy.pad(original_img, [(1, 1), (1, 1), (0, 0)], mode='edge')
-    flattened_img = padded_img.flatten().astype(numpy.uint8)
-    flattened_img_gpu = cuda.mem_alloc(flattened_img.nbytes)
+def sobel_filter(dimensions, original_img):
+    grayscaled_img = grayscale_filter(dimensions, original_img)
+    blurred_and_grayed_img = gaussian_blur(dimensions, numpy.reshape(grayscaled_img.astype(numpy.uint8), (image_height, image_width, PIXEL_ATTRIBUTES)))
+    preprocessed_img = numpy.pad(numpy.reshape(blurred_and_grayed_img.astype(numpy.uint8), (image_height, image_width, PIXEL_ATTRIBUTES)), [(SOBEL_FILTER_RADIUS, SOBEL_FILTER_RADIUS), (SOBEL_FILTER_RADIUS, SOBEL_FILTER_RADIUS), (0, 0)], mode='edge')
+    preprocessed_img = preprocessed_img.flatten()
+    preprocessed_img_gpu = cuda.mem_alloc(preprocessed_img.nbytes)
+    cuda.memcpy_htod(preprocessed_img_gpu, preprocessed_img)
+
     # Create an empty result array
-    x_sobel_filtered_img = numpy.empty(original_img.size, dtype=numpy.int16)
-    x_sobel_filtered_img_gpu = cuda.mem_alloc(x_sobel_filtered_img.nbytes)
-    # Copy input and output arrays to the device
-    cuda.memcpy_htod(flattened_img_gpu, flattened_img)
-    cuda.memcpy_htod(x_sobel_filtered_img_gpu, x_sobel_filtered_img)
-    # Call the method on the device to blur the image
+    filtered_img = numpy.empty(original_img.size, dtype=numpy.int16)
+    filtered_img_gpu = cuda.mem_alloc(filtered_img.nbytes)
+    cuda.memcpy_htod(filtered_img_gpu, filtered_img)
+
+    # Call the method on the device to get the min and max values in the matrix
     mod = cuda.module_from_file('sobel_kernel.cubin')
     sobel_filter = mod.get_function('SobelFilter')
-    sobel_filter(flattened_img_gpu,
-                    x_sobel_filtered_img_gpu,
-                    filter_array_gpu,
+    sobel_filter(preprocessed_img_gpu,
+                    filtered_img_gpu,
                     numpy.int32(dimensions.image_width),
                     numpy.int32(dimensions.image_height),
                     block=(dimensions.block_width, dimensions.block_height, 1),
                     grid=(dimensions.grid_width, dimensions.grid_height, PIXEL_ATTRIBUTES))
+    cuda.memcpy_dtoh(filtered_img, filtered_img_gpu)
 
-    # Create an empty result array
-    min_array = numpy.empty(original_img.size, dtype=numpy.int16)
-    min_array_gpu = cuda.mem_alloc(min_array.nbytes)
-    # Create an empty result array
-    max_array = numpy.empty(original_img.size, dtype=numpy.int16)
-    max_array_gpu = cuda.mem_alloc(max_array.nbytes)
-    # Copy output arrays to the device
-    cuda.memcpy_htod(min_array_gpu, min_array)
-    cuda.memcpy_htod(max_array_gpu, max_array)
-    # Call the method on the device to get the min and max values in the matrix
-    get_min_max = mod.get_function('GetMinMax')
-    get_min_max(x_sobel_filtered_img_gpu,
-                min_array_gpu,
-                max_array_gpu,
-                numpy.int32(dimensions.image_width * dimensions.image_height),
-                block=(dimensions.block_width, dimensions.block_height, 1),
-                grid=(dimensions.grid_width, dimensions.grid_height, PIXEL_ATTRIBUTES))
-    cuda.memcpy_dtoh(min_array, min_array_gpu)
-    cuda.memcpy_dtoh(max_array, max_array_gpu)
-    
-    return x_sobel_filtered_img_gpu, min_array[0], max_array[0]
-
-def sobel_filter(dimensions, original_img):
-    grayscaled_img = grayscale_filter(dimensions, original_img)
-    blurred_and_grayed_img = gaussian_blur(dimensions, numpy.reshape(grayscaled_img.astype(numpy.uint8), (image_height, image_width, PIXEL_ATTRIBUTES)))
-    preprocessed_img = numpy.reshape(blurred_and_grayed_img.astype(numpy.uint8), (image_height, image_width, PIXEL_ATTRIBUTES))
-
-    x_filter_array = numpy.array([[1, 0, -1], [2, 0, -2], [1, 0, -1]], dtype=numpy.int16).flatten()
-    x_filter_array_gpu = cuda.mem_alloc(x_filter_array.nbytes)
-    cuda.memcpy_htod(x_filter_array_gpu, x_filter_array)
-    x_sobel_filter_img, x_min, x_max = sobel_filter_one_dimension(dimensions, preprocessed_img, x_filter_array_gpu)
-
-    y_filter_array = numpy.array([[1, 2, 1], [0, 0, 0], [-1, -2, -1]], dtype=numpy.int16).flatten()
-    y_filter_array_gpu = cuda.mem_alloc(y_filter_array.nbytes)
-    cuda.memcpy_htod(y_filter_array_gpu, y_filter_array)
-    y_sobel_filter_img, y_min, y_max = sobel_filter_one_dimension(dimensions, preprocessed_img, y_filter_array_gpu)
+    max = numpy.float32(numpy.max(filtered_img))
+    min = numpy.float32(numpy.min(filtered_img))
     
     # Create an empty result array
     result = numpy.empty(original_img.size, dtype=numpy.uint8)
     result_gpu = cuda.mem_alloc(result.nbytes)
     cuda.memcpy_htod(result_gpu, result)
 
-    # Call the method on the device to get the min and max values in the matrix
-    mod = cuda.module_from_file('sobel_kernel.cubin')
-    edge_detection = mod.get_function('EdgeDetection')
-    edge_detection(x_sobel_filter_img,
-                    y_sobel_filter_img,
-                    result_gpu,
-                    numpy.int32(dimensions.image_width * dimensions.image_height),
-                    min(x_min, y_min),
-                    max(x_max, y_max),
-                    block=(dimensions.block_width, dimensions.block_height, 1),
-                    grid=(dimensions.grid_width, dimensions.grid_height, PIXEL_ATTRIBUTES))
+    normalize_colors = mod.get_function('NormalizeColors')
+    normalize_colors(filtered_img_gpu,
+                        result_gpu,
+                        numpy.int32(dimensions.image_width),
+                        numpy.int32(dimensions.image_height),
+                        min,
+                        max,
+                        block=(dimensions.block_width, dimensions.block_height, 1),
+                        grid=(dimensions.grid_width, dimensions.grid_height, PIXEL_ATTRIBUTES))
     cuda.memcpy_dtoh(result, result_gpu)
 
     return result
