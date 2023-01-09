@@ -84,7 +84,7 @@ def grayscale_filter(dimensions, original_img):
                         numpy.int32(dimensions.image_width),
                         numpy.int32(dimensions.image_height),
                         block=(dimensions.block_width, dimensions.block_height, 1),
-                        grid=(dimensions.grid_width, dimensions.grid_height, PIXEL_ATTRIBUTES))
+                        grid=(dimensions.grid_width, dimensions.grid_height, 1))
     return result_gpu.get()
 
 def sobel_filter(dimensions, original_img):
